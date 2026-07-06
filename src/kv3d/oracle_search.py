@@ -310,13 +310,7 @@ def label_source_steps(
     chosen: list[OracleStep] = []
     for sample_id in sorted({step.sample_id for step in steps}):
         full_eval = full_eval_by_sample.get(sample_id)
-        sample_steps = [
-            step
-            for step in steps
-            if step.sample_id == sample_id
-            and step.stage == "span"
-            and step.result.method in {"forward_greedy", "backward_greedy"}
-        ]
+        sample_steps = [step for step in steps if step.sample_id == sample_id]
         if full_eval is None or not sample_steps:
             continue
         threshold_hits = [
@@ -336,7 +330,13 @@ def label_source_steps(
                 )
             )
         else:
-            chosen.append(max(sample_steps, key=lambda step: quality_key(step.result, task_family=task_family)))
+            span_steps = [
+                step
+                for step in sample_steps
+                if step.stage == "span" and step.result.method in {"forward_greedy", "backward_greedy"}
+            ]
+            fallback_steps = span_steps or sample_steps
+            chosen.append(max(fallback_steps, key=lambda step: quality_key(step.result, task_family=task_family)))
     return chosen
 
 

@@ -134,6 +134,16 @@ def test_oracle_suffix_for_retrieval_requests_paragraph_label_only():
     assert suffix.endswith("Answer:")
 
 
+def test_label_universe_uses_full_blocks_when_search_is_limited():
+    full = [
+        OracleBlock("s1", 0, 0, 0, 0, 16),
+        OracleBlock("s1", 0, 0, 1, 16, 32),
+    ]
+    limited = [full[0]]
+
+    assert oracle_script._label_universe_for_sample(full, limited) == full
+
+
 def test_sanity_mode_reduces_search_scope(monkeypatch, tmp_path):
     class Args:
         model_name = "mock-model"

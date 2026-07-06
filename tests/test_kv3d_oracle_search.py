@@ -7,6 +7,7 @@ from src.kv3d.oracle_search import best_backward_removal
 from src.kv3d.oracle_search import build_block_universe
 from src.kv3d.oracle_search import compute_threshold_rows
 from src.kv3d.oracle_search import label_rows_from_steps
+from src.kv3d.oracle_search import label_source_steps
 from src.kv3d.oracle_search import oracle_eval_to_dict
 from src.kv3d.oracle_search import prune_bottom_fraction
 from src.kv3d.oracle_search import quality_ratio
@@ -193,6 +194,53 @@ def test_label_rows_from_steps_marks_selected_blocks_and_features():
             "selected_direction": None,
         },
     ]
+
+
+def test_label_source_steps_uses_high_quality_coarse_fallback():
+    coarse_block = OracleBlock("s1", 0, 0, 0, 0, 16)
+    span_block = OracleBlock("s1", 1, 0, 0, 0, 16)
+    full = _eval(method="full_kv", selected_blocks=(coarse_block, span_block), f1=1.0, contains=1.0, kv_ratio=1.0)
+    coarse_step = OracleStep(
+        sample_id="s1",
+        task_name="qasper",
+        direction="backward",
+        stage="layer",
+        step_index=1,
+        action="coarse_remove_layer",
+        changed_block=None,
+        result=_eval(
+            method="coarse_remove_layer",
+            selected_blocks=(coarse_block,),
+            f1=0.96,
+            contains=1.0,
+            kv_ratio=0.6,
+        ),
+    )
+    span_step = OracleStep(
+        sample_id="s1",
+        task_name="qasper",
+        direction="forward",
+        stage="span",
+        step_index=2,
+        action="add",
+        changed_block=span_block,
+        result=_eval(
+            method="forward_greedy",
+            selected_blocks=(span_block,),
+            f1=0.5,
+            contains=1.0,
+            kv_ratio=0.1,
+        ),
+    )
+
+    chosen = label_source_steps(
+        steps=[span_step, coarse_step],
+        full_eval_by_sample={"s1": full},
+        task_family="qa",
+        threshold=0.95,
+    )
+
+    assert chosen == [coarse_step]
 
 
 def test_write_oracle_artifacts_emits_required_tables_and_report(tmp_path):

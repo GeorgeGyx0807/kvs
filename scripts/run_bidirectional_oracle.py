@@ -272,6 +272,13 @@ def _limit_blocks(blocks: list[OracleBlock], max_span_candidates: int) -> list[O
     return sorted(merged.values(), key=lambda block: block.block_id)
 
 
+def _label_universe_for_sample(
+    actual_full_universe: Sequence[OracleBlock],
+    search_universe: Sequence[OracleBlock],
+) -> list[OracleBlock]:
+    return sorted(actual_full_universe or search_universe, key=lambda block: block.block_id)
+
+
 def _baseline_blocks(
     *,
     universe: Sequence[OracleBlock],
@@ -592,7 +599,7 @@ def run_task_oracle(*, bundle, task_name: str, samples: Sequence[ProfilingSample
             max_context_tokens=context_length,
         )
         universe = _limit_blocks(universe, args.max_span_candidates)
-        universe_all.extend(universe)
+        universe_all.extend(_label_universe_for_sample(actual_full_universe, universe))
 
         for baseline_strategy in ("prefix", "random", "uniform"):
             selected = _baseline_blocks(
