@@ -1,4 +1,7 @@
+import json
+
 import scripts.run_bidirectional_oracle as oracle_script
+from src.kv3d.oracle_gate import GateDecision
 from src.kv3d.oracle_search import OracleBlock
 from src.kv3d.oracle_search import OracleEval
 from src.kv3d.oracle_search import OracleStep
@@ -99,6 +102,36 @@ def test_parse_args_defaults_use_64_tokens_for_non_qmsum(monkeypatch):
 
     assert args.max_new_tokens == 64
     assert args.qmsum_max_new_tokens == 256
+
+
+def test_gate_row_includes_full_prediction_for_diagnostics():
+    row = oracle_script._gate_row_for_full_eval(
+        task_name="qasper",
+        full_eval=_eval("full_kv"),
+        decision=GateDecision(
+            accepted=False,
+            metric_name="contains_or_f1",
+            metric_value=0.25,
+            threshold=0.30,
+            reason="contains_or_f1<0.3",
+        ),
+        max_new_tokens=64,
+    )
+
+    assert row["full_prediction"] == "answer"
+    assert json.loads(row["answers_json"]) == ["answer"]
+
+
+def test_clean_generated_prediction_removes_followup_question():
+    assert oracle_script._clean_generated_prediction("answer\n\nQuestion: next\nAnswer: no") == "answer"
+
+
+def test_oracle_suffix_for_retrieval_requests_paragraph_label_only():
+    suffix = oracle_script._oracle_suffix_for_task("passage_retrieval_en", "which paragraph?")
+
+    assert "which paragraph?" in suffix
+    assert "only the paragraph label" in suffix
+    assert suffix.endswith("Answer:")
 
 
 def test_sanity_mode_reduces_search_scope(monkeypatch, tmp_path):

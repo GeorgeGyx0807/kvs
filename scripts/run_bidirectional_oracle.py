@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import copy
 import csv
+import json
 import random
 import sys
 from pathlib import Path
@@ -24,10 +25,10 @@ from src.kv3d.executor import _generate_greedy
 from src.kv3d.executor import _generate_greedy_from_context_cache
 from src.kv3d.executor import _metric_for_prediction
 from src.kv3d.executor import _prefill_context_cache
-from src.kv3d.executor import format_question_prompt
 from src.kv3d.executor import load_model_bundle
 from src.kv3d.masks import selection_kv_bytes
 from src.kv3d.oracle_gate import GateThresholds
+from src.kv3d.oracle_gate import GateDecision
 from src.kv3d.oracle_gate import full_kv_gate_decision
 from src.kv3d.oracle_search import OracleBlock
 from src.kv3d.oracle_search import OracleEval
@@ -95,6 +96,26 @@ def _parse_tasks(text: str) -> list[str]:
     return [item.strip() for item in text.split(",") if item.strip()]
 
 
+def _oracle_suffix_for_task(task_name: str, prompt: str) -> str:
+    if task_name == "passage_retrieval_en":
+        return (
+            f"\n\nQuestion: {prompt}\n"
+            "Answer with only the paragraph label, e.g. Paragraph 1.\n"
+            "Answer:"
+        )
+    return f"\n\nQuestion: {prompt}\nAnswer:"
+
+
+def _clean_generated_prediction(text: str) -> str:
+    cleaned = text.strip()
+    for marker in ("\n\nQuestion:", "\nQuestion:"):
+        index = cleaned.find(marker)
+        if index >= 0:
+            cleaned = cleaned[:index].strip()
+            break
+    return cleaned
+
+
 def _load_task_samples(args: argparse.Namespace, task_name: str) -> list[ProfilingSample]:
     rows = load_hf_dataset_split(args.dataset_name, args.split, config_name=task_name)
     samples = [row_to_sample_for_dataset(args.dataset_name, dict(row), spec={}) for row in rows]
@@ -128,6 +149,31 @@ def _write_gate_rows(rows: list[dict[str, Any]], path: Path) -> None:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
+
+
+def _gate_row_for_full_eval(
+    *,
+    task_name: str,
+    full_eval: OracleEval,
+    decision: GateDecision,
+    max_new_tokens: int,
+) -> dict[str, Any]:
+    return {
+        "task_name": task_name,
+        "sample_id": full_eval.sample_id,
+        "accepted": int(decision.accepted),
+        "metric_name": decision.metric_name,
+        "metric_value": round(decision.metric_value, 6),
+        "threshold": decision.threshold,
+        "reason": decision.reason,
+        "full_f1": full_eval.f1,
+        "full_contains": full_eval.contains,
+        "full_exact": full_eval.exact,
+        "full_nll": full_eval.nll,
+        "max_new_tokens": max_new_tokens,
+        "full_prediction": full_eval.prediction,
+        "answers_json": json.dumps(list(full_eval.answers), ensure_ascii=True),
+    }
 
 
 def _kv_bytes_for_blocks(
@@ -170,6 +216,7 @@ def _make_eval(
     prefill_ms: float | None,
     decode_ms: float | None,
 ) -> OracleEval:
+    prediction = _clean_generated_prediction(prediction)
     metric = _metric_for_prediction(
         prediction=prediction,
         answers=sample.answers,
@@ -273,7 +320,7 @@ def run_task_oracle(*, bundle, task_name: str, samples: Sequence[ProfilingSample
             break
         print(f"[oracle] task={task_name} sample={sample_index}/{len(samples)} id={sample.sample_id}", flush=True)
         context_ids = _encode(tokenizer, sample.context, device, max_tokens=args.max_context_tokens)
-        suffix_ids = _encode(tokenizer, f"\n\nQuestion: {sample.prompt}\nAnswer:", device)
+        suffix_ids = _encode(tokenizer, _oracle_suffix_for_task(task_name, sample.prompt), device)
         context_length = int(context_ids.shape[-1])
         context_cache, _ = _prefill_context_cache(model=model, input_ids=context_ids)
         search_layer_heads = [(layer, head) for layer in range(num_layers) for head in range(num_heads)]
@@ -443,20 +490,12 @@ def run_task_oracle(*, bundle, task_name: str, samples: Sequence[ProfilingSample
                 answers=full_eval.answers,
                 thresholds=gate_thresholds,
             )
-            gate_row = {
-                "task_name": task_name,
-                "sample_id": sample.sample_id,
-                "accepted": int(decision.accepted),
-                "metric_name": decision.metric_name,
-                "metric_value": round(decision.metric_value, 6),
-                "threshold": decision.threshold,
-                "reason": decision.reason,
-                "full_f1": full_eval.f1,
-                "full_contains": full_eval.contains,
-                "full_exact": full_eval.exact,
-                "full_nll": full_eval.nll,
-                "max_new_tokens": args.max_new_tokens,
-            }
+            gate_row = _gate_row_for_full_eval(
+                task_name=task_name,
+                full_eval=full_eval,
+                decision=decision,
+                max_new_tokens=args.max_new_tokens,
+            )
             if decision.accepted:
                 gate_accepted_rows.append(gate_row)
                 accepted_count += 1
@@ -473,7 +512,7 @@ def run_task_oracle(*, bundle, task_name: str, samples: Sequence[ProfilingSample
         baselines.append(full_eval)
         full_eval_by_sample[sample.sample_id] = full_eval
 
-        question_ids = _encode(tokenizer, format_question_prompt(sample), device)
+        question_ids = _encode(tokenizer, _oracle_suffix_for_task(task_name, sample.prompt).lstrip(), device)
         b_generation = _generate_greedy(model=model, tokenizer=tokenizer, input_ids=question_ids, max_new_tokens=args.max_new_tokens)
         b_nll = _answer_nll(model=model, tokenizer=tokenizer, prompt_ids=question_ids, answer=sample.gold_answer)
         baselines.append(
