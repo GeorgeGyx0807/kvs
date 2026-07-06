@@ -18,7 +18,7 @@ def test_summarize_bidirectional_oracle_merges_task_outputs(tmp_path):
         ("qasper", 0.8, 0.2, 0.25),
         ("qmsum", 0.6, 0.55, 0.5),
     ]:
-        task_dir = root / task
+        task_dir = root / f"{task}_shard_000" / task
         _write_csv(
             task_dir / "baseline_summary.csv",
             [

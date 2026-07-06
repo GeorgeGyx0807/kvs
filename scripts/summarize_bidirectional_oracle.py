@@ -68,11 +68,13 @@ def _mean(values: list[float | None]) -> float | None:
 
 
 def task_dirs(input_dir: Path) -> list[Path]:
-    return sorted(
-        path
-        for path in input_dir.iterdir()
-        if path.is_dir() and path.name != "summary" and (path / "baseline_summary.csv").exists()
-    )
+    summary_dir = input_dir / "summary"
+    dirs: list[Path] = []
+    for path in sorted(input_dir.rglob("baseline_summary.csv")):
+        if summary_dir in path.parents:
+            continue
+        dirs.append(path.parent)
+    return dirs
 
 
 def merge_tables(input_dir: Path, output_dir: Path) -> dict[str, list[dict[str, Any]]]:
