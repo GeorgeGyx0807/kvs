@@ -53,7 +53,13 @@ def test_main_runs_each_task_and_writes_task_artifacts(monkeypatch, tmp_path):
         max_samples = 20
         max_context_tokens = 2048
         span_size = 16
-        max_new_tokens = 32
+        max_new_tokens = 64
+        qmsum_max_new_tokens = 256
+        full_kv_gate = False
+        gate_qa_f1 = 0.30
+        gate_qmsum_rouge_l = 0.20
+        gate_candidate_multiplier = 5
+        max_candidate_samples = 0
         num_layers = 36
         num_heads = 8
         discard_fraction = 0.30
@@ -70,7 +76,7 @@ def test_main_runs_each_task_and_writes_task_artifacts(monkeypatch, tmp_path):
     monkeypatch.setattr(oracle_script, "_load_task_samples", lambda *args, **kwargs: ["sample"])
 
     def fake_run_task_oracle(**kwargs):
-        calls.append((kwargs["task_name"], kwargs["samples"], kwargs["args"].max_context_tokens))
+        calls.append((kwargs["task_name"], kwargs["samples"], kwargs["args"].max_context_tokens, kwargs["args"].max_new_tokens))
         return {
             "baselines": [_eval("full_kv", selected_blocks=(block,)), _eval("b_only")],
             "steps": [step],
@@ -82,9 +88,17 @@ def test_main_runs_each_task_and_writes_task_artifacts(monkeypatch, tmp_path):
 
     oracle_script.main()
 
-    assert calls == [("qasper", ["sample"], 2048), ("qmsum", ["sample"], 2048)]
+    assert calls == [("qasper", ["sample"], 2048, 64), ("qmsum", ["sample"], 2048, 256)]
     assert (tmp_path / "qasper" / "oracle_step_results.jsonl").exists()
     assert (tmp_path / "qmsum" / "report.md").exists()
+
+
+def test_parse_args_defaults_use_64_tokens_for_non_qmsum(monkeypatch):
+    monkeypatch.setattr("sys.argv", ["run_bidirectional_oracle.py"])
+    args = oracle_script.parse_args()
+
+    assert args.max_new_tokens == 64
+    assert args.qmsum_max_new_tokens == 256
 
 
 def test_sanity_mode_reduces_search_scope(monkeypatch, tmp_path):
@@ -99,7 +113,13 @@ def test_sanity_mode_reduces_search_scope(monkeypatch, tmp_path):
         max_samples = 20
         max_context_tokens = 2048
         span_size = 16
-        max_new_tokens = 32
+        max_new_tokens = 64
+        qmsum_max_new_tokens = 256
+        full_kv_gate = False
+        gate_qa_f1 = 0.30
+        gate_qmsum_rouge_l = 0.20
+        gate_candidate_multiplier = 5
+        max_candidate_samples = 0
         num_layers = 36
         num_heads = 8
         discard_fraction = 0.30
@@ -117,7 +137,7 @@ def test_sanity_mode_reduces_search_scope(monkeypatch, tmp_path):
     assert Args.tasks == "narrativeqa"
     assert Args.max_samples == 1
     assert Args.max_context_tokens == 128
-    assert Args.max_new_tokens == 4
+    assert Args.max_new_tokens == 64
     assert Args.num_layers == 2
     assert Args.num_heads == 2
     assert Args.max_forward_steps == 2

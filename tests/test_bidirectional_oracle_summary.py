@@ -1,4 +1,5 @@
 import csv
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -10,6 +11,11 @@ def _write_csv(path: Path, rows: list[dict]):
         writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
         writer.writeheader()
         writer.writerows(rows)
+
+
+def _write_jsonl(path: Path, rows: list[dict]):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(json.dumps(row) for row in rows) + "\n")
 
 
 def test_summarize_bidirectional_oracle_merges_task_outputs(tmp_path):
@@ -78,3 +84,72 @@ def test_summarize_bidirectional_oracle_merges_task_outputs(tmp_path):
     assert "Which tasks depend more on KV?" in report
     assert "qasper" in report
     assert "qmsum" in report
+
+
+def test_summarize_bidirectional_oracle_filters_by_full_kv_gate(tmp_path):
+    root = tmp_path / "oracle"
+    for shard, sample_id, f1 in [
+        ("qasper_shard_000", "accepted", 0.40),
+        ("qasper_shard_001", "rejected", 0.10),
+    ]:
+        task_dir = root / shard / "qasper"
+        _write_jsonl(
+            task_dir / "baselines.jsonl",
+            [
+                {
+                    "sample_id": sample_id,
+                    "task_name": "qasper",
+                    "method": "full_kv",
+                    "f1": f1,
+                    "contains": 0.0,
+                    "exact": 0.0,
+                    "prediction": "answer",
+                    "answers": ["answer"],
+                }
+            ],
+        )
+        _write_csv(
+            task_dir / "baseline_summary.csv",
+            [
+                {"method": "full_kv", "sample_count": 1, "mean_f1": f1, "mean_contains": 0.0, "mean_nll": 1.0, "mean_kv_ratio": 1.0},
+                {"method": "b_only", "sample_count": 1, "mean_f1": 0.0, "mean_contains": 0.0, "mean_nll": 2.0, "mean_kv_ratio": 0.0},
+            ],
+        )
+        for name in ["oracle_thresholds.csv", "selection_frequency_layer.csv", "selection_frequency_head.csv", "selection_frequency_span.csv"]:
+            _write_csv(task_dir / name, [{"task_name": "qasper", "sample_id": sample_id, "threshold": 0.95, "min_kv_ratio": 0.5, "method": "forward_greedy"}])
+        _write_csv(
+            task_dir / "oracle_quality_curves.csv",
+            [{"sample_id": sample_id, "task_name": "qasper", "method": "full_kv", "f1": f1, "contains": 0.0, "exact": 0.0, "kv_ratio": 1.0}],
+        )
+        _write_csv(
+            task_dir / "oracle_labels.csv",
+            [{"sample_id": sample_id, "task_name": "qasper", "layer": 1, "kv_head": 2, "span_id": 3, "selected": 1}],
+        )
+        _write_csv(
+            task_dir / "block_features_labels.csv",
+            [{"sample_id": sample_id, "task_name": "qasper", "layer": 1, "kv_head": 2, "span_id": 3, "selected": 1}],
+        )
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/summarize_bidirectional_oracle.py",
+            "--input-dir",
+            str(root),
+            "--output-dir",
+            str(root / "summary_filtered"),
+            "--full-kv-gate",
+            "--gate-qa-f1",
+            "0.30",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        check=True,
+    )
+
+    labels = list(csv.DictReader((root / "summary_filtered" / "oracle_labels_all.csv").open()))
+    accepted = list(csv.DictReader((root / "summary_filtered" / "accepted_samples.csv").open()))
+    rejected = list(csv.DictReader((root / "summary_filtered" / "rejected_samples.csv").open()))
+
+    assert [row["sample_id"] for row in labels] == ["accepted"]
+    assert [row["sample_id"] for row in accepted] == ["accepted"]
+    assert [row["sample_id"] for row in rejected] == ["rejected"]

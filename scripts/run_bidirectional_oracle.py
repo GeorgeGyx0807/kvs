@@ -4,10 +4,12 @@
 from __future__ import annotations
 
 import argparse
+import copy
+import csv
 import random
 import sys
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Any, Iterable, Sequence
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -25,6 +27,8 @@ from src.kv3d.executor import _prefill_context_cache
 from src.kv3d.executor import format_question_prompt
 from src.kv3d.executor import load_model_bundle
 from src.kv3d.masks import selection_kv_bytes
+from src.kv3d.oracle_gate import GateThresholds
+from src.kv3d.oracle_gate import full_kv_gate_decision
 from src.kv3d.oracle_search import OracleBlock
 from src.kv3d.oracle_search import OracleEval
 from src.kv3d.oracle_search import OracleStep
@@ -54,7 +58,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-samples", type=int, default=20)
     parser.add_argument("--max-context-tokens", type=int, default=2048)
     parser.add_argument("--span-size", type=int, default=16)
-    parser.add_argument("--max-new-tokens", type=int, default=32)
+    parser.add_argument("--max-new-tokens", type=int, default=64)
+    parser.add_argument("--qmsum-max-new-tokens", type=int, default=256)
+    parser.add_argument("--full-kv-gate", action="store_true")
+    parser.add_argument("--gate-qa-f1", type=float, default=0.30)
+    parser.add_argument("--gate-qmsum-rouge-l", type=float, default=0.20)
+    parser.add_argument("--gate-candidate-multiplier", type=int, default=5)
+    parser.add_argument("--max-candidate-samples", type=int, default=0)
     parser.add_argument("--num-layers", type=int, default=0)
     parser.add_argument("--num-heads", type=int, default=0)
     parser.add_argument("--discard-fraction", type=float, default=0.30)
@@ -74,7 +84,6 @@ def apply_sanity_defaults(args: argparse.Namespace) -> None:
     args.tasks = args.tasks.split(",")[0].strip()
     args.max_samples = min(args.max_samples, 1)
     args.max_context_tokens = min(args.max_context_tokens, 128)
-    args.max_new_tokens = min(args.max_new_tokens, 4)
     args.num_layers = 2 if args.num_layers <= 0 else min(args.num_layers, 2)
     args.num_heads = 2 if args.num_heads <= 0 else min(args.num_heads, 2)
     args.max_forward_steps = 2 if args.max_forward_steps <= 0 else min(args.max_forward_steps, 2)
@@ -89,7 +98,36 @@ def _parse_tasks(text: str) -> list[str]:
 def _load_task_samples(args: argparse.Namespace, task_name: str) -> list[ProfilingSample]:
     rows = load_hf_dataset_split(args.dataset_name, args.split, config_name=task_name)
     samples = [row_to_sample_for_dataset(args.dataset_name, dict(row), spec={}) for row in rows]
+    if getattr(args, "full_kv_gate", False):
+        max_candidate_samples = int(getattr(args, "max_candidate_samples", 0) or 0)
+        if max_candidate_samples > 0:
+            return samples[args.sample_offset : args.sample_offset + max_candidate_samples]
+        candidate_count = int(args.max_samples) * max(1, int(getattr(args, "gate_candidate_multiplier", 1) or 1))
+        return samples[args.sample_offset : args.sample_offset + candidate_count]
     return samples[args.sample_offset : args.sample_offset + args.max_samples]
+
+
+def _task_args_for_task(args: argparse.Namespace, task_name: str) -> argparse.Namespace:
+    task_args = copy.copy(args)
+    if task_name == "qmsum":
+        task_args.max_new_tokens = max(int(args.max_new_tokens), int(args.qmsum_max_new_tokens))
+    return task_args
+
+
+def _write_gate_rows(rows: list[dict[str, Any]], path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not rows:
+        path.write_text("")
+        return
+    fieldnames: list[str] = []
+    for row in rows:
+        for key in row:
+            if key not in fieldnames:
+                fieldnames.append(key)
+    with path.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 def _kv_bytes_for_blocks(
@@ -225,8 +263,14 @@ def run_task_oracle(*, bundle, task_name: str, samples: Sequence[ProfilingSample
     steps: list[OracleStep] = []
     universe_all: list[OracleBlock] = []
     full_eval_by_sample: dict[str, OracleEval] = {}
+    gate_accepted_rows: list[dict[str, Any]] = []
+    gate_rejected_rows: list[dict[str, Any]] = []
+    gate_thresholds = GateThresholds(qa_f1=args.gate_qa_f1, qmsum_rouge_l=args.gate_qmsum_rouge_l)
+    accepted_count = 0
 
     for sample_index, sample in enumerate(samples, start=1):
+        if getattr(args, "full_kv_gate", False) and accepted_count >= int(args.max_samples):
+            break
         print(f"[oracle] task={task_name} sample={sample_index}/{len(samples)} id={sample.sample_id}", flush=True)
         context_ids = _encode(tokenizer, sample.context, device, max_tokens=args.max_context_tokens)
         suffix_ids = _encode(tokenizer, f"\n\nQuestion: {sample.prompt}\nAnswer:", device)
@@ -389,6 +433,43 @@ def run_task_oracle(*, bundle, task_name: str, samples: Sequence[ProfilingSample
             )
 
         full_eval = eval_full_kv()
+        if getattr(args, "full_kv_gate", False):
+            decision = full_kv_gate_decision(
+                task_name=task_name,
+                f1=full_eval.f1,
+                contains=full_eval.contains,
+                exact=full_eval.exact,
+                prediction=full_eval.prediction,
+                answers=full_eval.answers,
+                thresholds=gate_thresholds,
+            )
+            gate_row = {
+                "task_name": task_name,
+                "sample_id": sample.sample_id,
+                "accepted": int(decision.accepted),
+                "metric_name": decision.metric_name,
+                "metric_value": round(decision.metric_value, 6),
+                "threshold": decision.threshold,
+                "reason": decision.reason,
+                "full_f1": full_eval.f1,
+                "full_contains": full_eval.contains,
+                "full_exact": full_eval.exact,
+                "full_nll": full_eval.nll,
+                "max_new_tokens": args.max_new_tokens,
+            }
+            if decision.accepted:
+                gate_accepted_rows.append(gate_row)
+                accepted_count += 1
+            else:
+                print(
+                    f"[gate] reject task={task_name} sample={sample.sample_id} "
+                    f"{decision.metric_name}={decision.metric_value:.6g} threshold={decision.threshold}",
+                    flush=True,
+                )
+                gate_rejected_rows.append(gate_row)
+                continue
+        else:
+            accepted_count += 1
         baselines.append(full_eval)
         full_eval_by_sample[sample.sample_id] = full_eval
 
@@ -576,6 +657,8 @@ def run_task_oracle(*, bundle, task_name: str, samples: Sequence[ProfilingSample
         "steps": steps,
         "universe": universe_all,
         "full_eval_by_sample": full_eval_by_sample,
+        "gate_accepted_samples": gate_accepted_rows,
+        "gate_rejected_samples": gate_rejected_rows,
     }
 
 
@@ -587,10 +670,11 @@ def main() -> None:
         raise SystemExit("no LongBench tasks requested")
     bundle = load_model_bundle(args.model_name, device_map=args.device_map, dtype=args.dtype)
     for task_name in tasks:
-        samples = _load_task_samples(args, task_name)
+        task_args = _task_args_for_task(args, task_name)
+        samples = _load_task_samples(task_args, task_name)
         if not samples:
             raise SystemExit(f"no samples loaded for task {task_name}")
-        result = run_task_oracle(bundle=bundle, task_name=task_name, samples=samples, args=args)
+        result = run_task_oracle(bundle=bundle, task_name=task_name, samples=samples, args=task_args)
         task_output = args.output_dir / task_name
         write_oracle_artifacts(
             output_dir=task_output,
@@ -599,8 +683,11 @@ def main() -> None:
             steps=result["steps"],
             universe=result["universe"],
             full_eval_by_sample=result["full_eval_by_sample"],
-            config={**vars(args), "task_name": task_name, "sanity": bool(args.sanity)},
+            config={**vars(task_args), "task_name": task_name, "sanity": bool(args.sanity)},
         )
+        if getattr(task_args, "full_kv_gate", False):
+            _write_gate_rows(result.get("gate_accepted_samples", []), task_output / "accepted_samples.csv")
+            _write_gate_rows(result.get("gate_rejected_samples", []), task_output / "rejected_samples.csv")
 
 
 if __name__ == "__main__":
