@@ -214,8 +214,10 @@ def run_task_oracle(*, bundle, task_name: str, samples: Sequence[ProfilingSample
     model = bundle.model
     tokenizer = bundle.tokenizer
     device = _device_of(model)
-    num_layers = args.num_layers or int(model.config.num_hidden_layers)
-    num_heads = args.num_heads or int(model.config.num_key_value_heads)
+    actual_num_layers = int(model.config.num_hidden_layers)
+    actual_num_heads = int(model.config.num_key_value_heads)
+    num_layers = args.num_layers or actual_num_layers
+    num_heads = args.num_heads or actual_num_heads
     head_dim = int(getattr(model.config, "head_dim", model.config.hidden_size // model.config.num_attention_heads))
     task_family = task_family_for_longbench(task_name)
 
@@ -230,15 +232,16 @@ def run_task_oracle(*, bundle, task_name: str, samples: Sequence[ProfilingSample
         suffix_ids = _encode(tokenizer, f"\n\nQuestion: {sample.prompt}\nAnswer:", device)
         context_length = int(context_ids.shape[-1])
         context_cache, _ = _prefill_context_cache(model=model, input_ids=context_ids)
-        layer_heads_all = [(layer, head) for layer in range(num_layers) for head in range(num_heads)]
-        full_universe = build_block_universe(
+        search_layer_heads = [(layer, head) for layer in range(num_layers) for head in range(num_heads)]
+        full_layer_heads = [(layer, head) for layer in range(actual_num_layers) for head in range(actual_num_heads)]
+        actual_full_universe = build_block_universe(
             sample_id=sample.sample_id,
-            layers=list(range(num_layers)),
-            layer_heads=layer_heads_all,
+            layers=list(range(actual_num_layers)),
+            layer_heads=full_layer_heads,
             span_size=args.span_size,
             max_context_tokens=context_length,
         )
-        full_keys = oracle_blocks_to_kv3d_keys(full_universe)
+        full_keys = oracle_blocks_to_kv3d_keys(actual_full_universe)
         full_kv_bytes = selection_kv_bytes(
             selected_blocks=full_keys,
             seq_len=context_length,
@@ -298,7 +301,94 @@ def run_task_oracle(*, bundle, task_name: str, samples: Sequence[ProfilingSample
                 decode_ms=generation.decode_ms,
             )
 
-        full_eval = eval_selected(full_universe, method="full_kv", direction="baseline", stage="baseline", step_index=0)
+        def eval_full_kv() -> OracleEval:
+            generation = _generate_greedy_from_context_cache(
+                model=model,
+                tokenizer=tokenizer,
+                context_cache=context_cache,
+                suffix_ids=suffix_ids,
+                context_length=context_length,
+                max_new_tokens=args.max_new_tokens,
+                chunk_size=args.span_size,
+            )
+            nll = _answer_nll_from_context_cache(
+                model=model,
+                tokenizer=tokenizer,
+                context_cache=context_cache,
+                suffix_ids=suffix_ids,
+                answer=sample.gold_answer,
+                context_length=context_length,
+                chunk_size=args.span_size,
+            )
+            return _make_eval(
+                sample=sample,
+                method="full_kv",
+                direction="baseline",
+                stage="baseline",
+                step_index=0,
+                selected_blocks=actual_full_universe,
+                prediction=generation.text,
+                nll=nll,
+                selected_kv_bytes=full_kv_bytes,
+                full_kv_bytes=full_kv_bytes,
+                ttft_ms=generation.ttft_ms,
+                prefill_ms=generation.prefill_ms,
+                decode_ms=generation.decode_ms,
+            )
+
+        def eval_removed(
+            removed: Sequence[OracleBlock],
+            *,
+            method: str,
+            stage: str,
+            step_index: int,
+        ) -> OracleEval:
+            removed_keys = oracle_blocks_to_kv3d_keys(removed)
+            generation = _generate_greedy_from_context_cache(
+                model=model,
+                tokenizer=tokenizer,
+                context_cache=context_cache,
+                suffix_ids=suffix_ids,
+                context_length=context_length,
+                max_new_tokens=args.max_new_tokens,
+                chunk_size=args.span_size,
+                removed_blocks=removed_keys,
+            )
+            nll = _answer_nll_from_context_cache(
+                model=model,
+                tokenizer=tokenizer,
+                context_cache=context_cache,
+                suffix_ids=suffix_ids,
+                answer=sample.gold_answer,
+                context_length=context_length,
+                chunk_size=args.span_size,
+                removed_blocks=removed_keys,
+            )
+            selected = [block for block in actual_full_universe if block.block_id not in {item.block_id for item in removed}]
+            selected_kv_bytes = _kv_bytes_for_blocks(
+                blocks=selected,
+                sample_id=sample.sample_id,
+                context_length=context_length,
+                head_dim=head_dim,
+                span_size=args.span_size,
+            )
+            return _make_eval(
+                sample=sample,
+                method=method,
+                direction="backward",
+                stage=stage,
+                step_index=step_index,
+                selected_blocks=selected,
+                prediction=generation.text,
+                nll=nll,
+                selected_kv_bytes=selected_kv_bytes,
+                full_kv_bytes=full_kv_bytes,
+                ttft_ms=generation.ttft_ms,
+                prefill_ms=generation.prefill_ms,
+                decode_ms=generation.decode_ms,
+            )
+
+        full_eval = eval_full_kv()
         baselines.append(full_eval)
         full_eval_by_sample[sample.sample_id] = full_eval
 
@@ -325,8 +415,8 @@ def run_task_oracle(*, bundle, task_name: str, samples: Sequence[ProfilingSample
 
         layer_removal_results = []
         for layer in range(num_layers):
-            selected = [block for block in full_universe if block.layer != layer]
-            result = eval_selected(selected, method="coarse_remove_layer", direction="backward", stage="layer", step_index=layer)
+            removed = [block for block in actual_full_universe if block.layer == layer]
+            result = eval_removed(removed, method="coarse_remove_layer", stage="layer", step_index=layer)
             layer_removal_results.append((layer, result))
             steps.append(
                 OracleStep(
@@ -347,11 +437,10 @@ def run_task_oracle(*, bundle, task_name: str, samples: Sequence[ProfilingSample
 
         layer_head_removal_results = []
         for layer_head_index, (layer, head) in enumerate([(layer, head) for layer in kept_layers for head in range(num_heads)]):
-            selected = [block for block in full_universe if not (block.layer == layer and block.kv_head == head)]
-            result = eval_selected(
-                selected,
+            removed = [block for block in actual_full_universe if block.layer == layer and block.kv_head == head]
+            result = eval_removed(
+                removed,
                 method="coarse_remove_layer_head",
-                direction="backward",
                 stage="layer_head",
                 step_index=layer_head_index,
             )
