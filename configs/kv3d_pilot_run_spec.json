@@ -1,12 +1,12 @@
 {
   "commands": {
     "merge_shards": "python3 scripts/merge_kv3d_shards.py --shard-dirs outputs/kv3d_pilot_l2h2c4_s20_shard_000 outputs/kv3d_pilot_l2h2c4_s20_shard_001 outputs/kv3d_pilot_l2h2c4_s20_shard_002 outputs/kv3d_pilot_l2h2c4_s20_shard_003 --num-layers 2 --num-heads 2 --num-chunks 4 --include-addition --model-name Qwen/Qwen3-8B --output-dir outputs/kv3d_pilot_l2h2c4_s20",
-    "run_gpu_profile": "python3 scripts/run_kv3d_gpu_profile.py --model-name Qwen/Qwen3-8B --dataset-name THUDM/LongBench --config-name narrativeqa --split test --max-samples 20 --chunk-size 128 --max-context-tokens 512 --max-new-tokens 4 --max-layers 2 --max-heads 2 --num-chunks 4 --include-addition --output-dir outputs/kv3d_pilot_l2h2c4_s20",
+    "run_gpu_profile": "python3 scripts/run_kv3d_gpu_profile.py --model-name Qwen/Qwen3-8B --dataset-name THUDM/LongBench --config-name narrativeqa --split test --max-samples 20 --chunk-size 128 --max-context-tokens 512 --max-new-tokens 64 --max-layers 2 --max-heads 2 --num-chunks 4 --include-addition --output-dir outputs/kv3d_pilot_l2h2c4_s20",
     "run_shards": [
-      "python3 scripts/run_kv3d_gpu_profile.py --model-name Qwen/Qwen3-8B --dataset-name THUDM/LongBench --config-name narrativeqa --split test --sample-offset 0 --max-samples 5 --chunk-size 128 --max-context-tokens 512 --max-new-tokens 4 --max-layers 2 --max-heads 2 --num-chunks 4 --include-addition --output-dir outputs/kv3d_pilot_l2h2c4_s20_shard_000",
-      "python3 scripts/run_kv3d_gpu_profile.py --model-name Qwen/Qwen3-8B --dataset-name THUDM/LongBench --config-name narrativeqa --split test --sample-offset 5 --max-samples 5 --chunk-size 128 --max-context-tokens 512 --max-new-tokens 4 --max-layers 2 --max-heads 2 --num-chunks 4 --include-addition --output-dir outputs/kv3d_pilot_l2h2c4_s20_shard_001",
-      "python3 scripts/run_kv3d_gpu_profile.py --model-name Qwen/Qwen3-8B --dataset-name THUDM/LongBench --config-name narrativeqa --split test --sample-offset 10 --max-samples 5 --chunk-size 128 --max-context-tokens 512 --max-new-tokens 4 --max-layers 2 --max-heads 2 --num-chunks 4 --include-addition --output-dir outputs/kv3d_pilot_l2h2c4_s20_shard_002",
-      "python3 scripts/run_kv3d_gpu_profile.py --model-name Qwen/Qwen3-8B --dataset-name THUDM/LongBench --config-name narrativeqa --split test --sample-offset 15 --max-samples 5 --chunk-size 128 --max-context-tokens 512 --max-new-tokens 4 --max-layers 2 --max-heads 2 --num-chunks 4 --include-addition --output-dir outputs/kv3d_pilot_l2h2c4_s20_shard_003"
+      "python3 scripts/run_kv3d_gpu_profile.py --model-name Qwen/Qwen3-8B --dataset-name THUDM/LongBench --config-name narrativeqa --split test --sample-offset 0 --max-samples 5 --chunk-size 128 --max-context-tokens 512 --max-new-tokens 64 --max-layers 2 --max-heads 2 --num-chunks 4 --include-addition --output-dir outputs/kv3d_pilot_l2h2c4_s20_shard_000",
+      "python3 scripts/run_kv3d_gpu_profile.py --model-name Qwen/Qwen3-8B --dataset-name THUDM/LongBench --config-name narrativeqa --split test --sample-offset 5 --max-samples 5 --chunk-size 128 --max-context-tokens 512 --max-new-tokens 64 --max-layers 2 --max-heads 2 --num-chunks 4 --include-addition --output-dir outputs/kv3d_pilot_l2h2c4_s20_shard_001",
+      "python3 scripts/run_kv3d_gpu_profile.py --model-name Qwen/Qwen3-8B --dataset-name THUDM/LongBench --config-name narrativeqa --split test --sample-offset 10 --max-samples 5 --chunk-size 128 --max-context-tokens 512 --max-new-tokens 64 --max-layers 2 --max-heads 2 --num-chunks 4 --include-addition --output-dir outputs/kv3d_pilot_l2h2c4_s20_shard_002",
+      "python3 scripts/run_kv3d_gpu_profile.py --model-name Qwen/Qwen3-8B --dataset-name THUDM/LongBench --config-name narrativeqa --split test --sample-offset 15 --max-samples 5 --chunk-size 128 --max-context-tokens 512 --max-new-tokens 64 --max-layers 2 --max-heads 2 --num-chunks 4 --include-addition --output-dir outputs/kv3d_pilot_l2h2c4_s20_shard_003"
     ],
     "shard_status": "python3 scripts/kv3d_shard_status.py --spec configs/kv3d_pilot_run_spec.json --output outputs/kv3d_pilot_l2h2c4_s20/shard_status.json",
     "validate": "python3 scripts/validate_kv3d_run.py --run-dir outputs/kv3d_pilot_l2h2c4_s20 --output outputs/kv3d_pilot_l2h2c4_s20/validation.json --min-samples 20 --require-stability --min-heterogeneity-range 0.001",
@@ -27,7 +27,7 @@
     "chunk_size": 128,
     "include_addition": true,
     "max_context_tokens": 512,
-    "max_new_tokens": 4,
+    "max_new_tokens": 64,
     "num_chunks": 4,
     "num_heads": 2,
     "num_layers": 2

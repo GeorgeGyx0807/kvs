@@ -20,7 +20,7 @@ def test_build_kv3d_run_spec_computes_plan_size_and_commands():
         num_chunks=4,
         chunk_size=128,
         max_context_tokens=512,
-        max_new_tokens=4,
+        max_new_tokens=64,
         include_addition=True,
         min_samples_gate=20,
         min_heterogeneity_range=0.001,
@@ -76,7 +76,7 @@ def test_build_kv3d_run_spec_cli_writes_json(tmp_path):
             "--max-context-tokens",
             "512",
             "--max-new-tokens",
-            "4",
+            "64",
             "--include-addition",
             "--shard-size",
             "5",
@@ -94,6 +94,7 @@ def test_build_kv3d_run_spec_cli_writes_json(tmp_path):
     payload = json.loads(output_path.read_text())
     assert payload["plan_size"] == 800
     assert payload["profile_name"] == "pilot"
+    assert payload["dimensions"]["max_new_tokens"] == 64
     assert len(payload["commands"]["run_shards"]) == 4
     assert len(payload["commands"]["validate_shards"]) == 4
     assert "merge_shards" in payload["commands"]

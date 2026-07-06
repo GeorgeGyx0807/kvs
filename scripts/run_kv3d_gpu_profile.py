@@ -36,7 +36,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--chunk-size", type=int, default=128)
     parser.add_argument("--span-size", type=int, default=0)
     parser.add_argument("--max-context-tokens", type=int, default=2048)
-    parser.add_argument("--max-new-tokens", type=int, default=16)
+    parser.add_argument("--max-new-tokens", type=int, default=64)
     parser.add_argument("--max-layers", type=int, default=0)
     parser.add_argument("--max-heads", type=int, default=0)
     parser.add_argument("--num-chunks", type=int, default=0)

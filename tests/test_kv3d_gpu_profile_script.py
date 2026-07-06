@@ -1,6 +1,17 @@
 import scripts.run_kv3d_gpu_profile as gpu_script
 
 
+def test_gpu_profile_default_max_new_tokens_is_64(monkeypatch):
+    monkeypatch.setattr(
+        "sys.argv",
+        ["run_kv3d_gpu_profile.py", "--output-dir", "outputs/test"],
+    )
+
+    args = gpu_script.parse_args()
+
+    assert args.max_new_tokens == 64
+
+
 def test_gpu_profile_passes_include_addition_to_runner(monkeypatch, tmp_path):
     calls = {}
 
