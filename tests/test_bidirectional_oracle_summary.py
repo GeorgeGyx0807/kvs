@@ -153,3 +153,62 @@ def test_summarize_bidirectional_oracle_filters_by_full_kv_gate(tmp_path):
     assert [row["sample_id"] for row in labels] == ["accepted"]
     assert [row["sample_id"] for row in accepted] == ["accepted"]
     assert [row["sample_id"] for row in rejected] == ["rejected"]
+
+
+def test_summarize_bidirectional_oracle_uses_existing_gate_csv_rows(tmp_path):
+    root = tmp_path / "oracle"
+    task_dir = root / "qasper_shard_000" / "qasper"
+    _write_jsonl(
+        task_dir / "baselines.jsonl",
+        [
+            {
+                "sample_id": "accepted",
+                "task_name": "qasper",
+                "method": "full_kv",
+                "f1": 0.40,
+                "contains": 0.0,
+                "exact": 0.0,
+                "prediction": "answer",
+                "answers": ["answer"],
+            }
+        ],
+    )
+    _write_csv(
+        task_dir / "accepted_samples.csv",
+        [{"task_name": "qasper", "sample_id": "accepted", "accepted": 1, "metric_name": "contains_or_f1", "metric_value": 0.40}],
+    )
+    _write_csv(
+        task_dir / "rejected_samples.csv",
+        [{"task_name": "qasper", "sample_id": "rejected", "accepted": 0, "metric_name": "contains_or_f1", "metric_value": 0.20}],
+    )
+    _write_csv(
+        task_dir / "baseline_summary.csv",
+        [{"method": "full_kv", "sample_count": 1, "mean_f1": 0.40, "mean_contains": 0.0, "mean_nll": 1.0, "mean_kv_ratio": 1.0}],
+    )
+    for name in ["oracle_thresholds.csv", "selection_frequency_layer.csv", "selection_frequency_head.csv", "selection_frequency_span.csv"]:
+        _write_csv(task_dir / name, [{"task_name": "qasper", "threshold": 0.95, "min_kv_ratio": 0.5}])
+    _write_csv(task_dir / "oracle_quality_curves.csv", [{"sample_id": "accepted", "task_name": "qasper", "method": "full_kv", "f1": 0.40, "contains": 0.0, "exact": 0.0, "kv_ratio": 1.0}])
+    _write_csv(task_dir / "oracle_labels.csv", [{"sample_id": "accepted", "task_name": "qasper", "layer": 1, "kv_head": 2, "span_id": 3, "selected": 1}])
+    _write_csv(task_dir / "block_features_labels.csv", [{"sample_id": "accepted", "task_name": "qasper", "layer": 1, "kv_head": 2, "span_id": 3, "selected": 1}])
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/summarize_bidirectional_oracle.py",
+            "--input-dir",
+            str(root),
+            "--output-dir",
+            str(root / "summary"),
+            "--full-kv-gate",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        check=True,
+    )
+
+    accepted = list(csv.DictReader((root / "summary" / "accepted_samples.csv").open()))
+    rejected = list(csv.DictReader((root / "summary" / "rejected_samples.csv").open()))
+    thresholds = list(csv.DictReader((root / "summary" / "oracle_thresholds_all.csv").open()))
+
+    assert [row["sample_id"] for row in accepted] == ["accepted"]
+    assert [row["sample_id"] for row in rejected] == ["rejected"]
+    assert [row["task_name"] for row in thresholds] == ["qasper"]

@@ -105,6 +105,23 @@ def _gate_rows_for_task_dir(
     *,
     thresholds: GateThresholds,
 ) -> tuple[set[str], list[dict[str, Any]], list[dict[str, Any]]]:
+    existing_accepted = _read_csv(task_dir / "accepted_samples.csv")
+    existing_rejected = _read_csv(task_dir / "rejected_samples.csv")
+    if existing_accepted or existing_rejected:
+        def normalize_existing(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+            normalized = []
+            for row in rows:
+                payload = dict(row)
+                payload.setdefault("task_name", task_dir.name)
+                payload.setdefault("source_dir", str(task_dir))
+                normalized.append(payload)
+            return normalized
+
+        accepted_rows = normalize_existing(existing_accepted)
+        rejected_rows = normalize_existing(existing_rejected)
+        accepted_ids = {str(row.get("sample_id") or "") for row in accepted_rows}
+        return accepted_ids, accepted_rows, rejected_rows
+
     accepted_ids: set[str] = set()
     accepted_rows: list[dict[str, Any]] = []
     rejected_rows: list[dict[str, Any]] = []
@@ -150,12 +167,11 @@ def _filter_rows_for_gate(
     rows: list[dict[str, Any]],
     *,
     accepted_ids: set[str],
-    task_dir_all_accepted: bool,
 ) -> list[dict[str, Any]]:
     if not rows:
         return []
     if "sample_id" not in rows[0]:
-        return rows if task_dir_all_accepted else []
+        return rows if accepted_ids else []
     return [row for row in rows if str(row.get("sample_id") or "") in accepted_ids]
 
 
@@ -173,19 +189,16 @@ def merge_tables(
     for task_dir in task_dirs(input_dir):
         task_name = task_dir.name
         accepted_ids: set[str] = set()
-        task_dir_all_accepted = True
         if full_kv_gate:
             accepted_ids, accepted_rows, rejected_rows = _gate_rows_for_task_dir(task_dir, thresholds=thresholds)
             accepted_sample_rows.extend(accepted_rows)
             rejected_sample_rows.extend(rejected_rows)
-            task_dir_all_accepted = bool(accepted_rows) and not rejected_rows
         for input_name, output_name in TABLES.items():
             rows = _read_csv(task_dir / input_name)
             if full_kv_gate:
                 rows = _filter_rows_for_gate(
                     rows,
                     accepted_ids=accepted_ids,
-                    task_dir_all_accepted=task_dir_all_accepted,
                 )
             for row in rows:
                 row = dict(row)
