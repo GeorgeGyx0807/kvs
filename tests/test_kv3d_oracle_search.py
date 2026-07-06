@@ -7,6 +7,7 @@ from src.kv3d.oracle_search import best_backward_removal
 from src.kv3d.oracle_search import build_block_universe
 from src.kv3d.oracle_search import compute_threshold_rows
 from src.kv3d.oracle_search import label_rows_from_steps
+from src.kv3d.oracle_search import oracle_eval_to_dict
 from src.kv3d.oracle_search import prune_bottom_fraction
 from src.kv3d.oracle_search import quality_ratio
 from src.kv3d.oracle_search import render_oracle_report
@@ -242,3 +243,26 @@ def test_render_oracle_report_mentions_task_dependence_and_selector_suitability(
     assert "Which tasks depend more on KV?" in report
     assert "Do oracle-selected layer/head/span patterns differ by task?" in report
     assert "Are these labels suitable for selector training?" in report
+
+
+def test_oracle_eval_to_dict_compacts_large_non_span_selected_block_lists():
+    blocks = tuple(OracleBlock("s1", 0, 0, idx, idx * 16, (idx + 1) * 16) for idx in range(3))
+    base = _eval(method="coarse_remove_layer", selected_blocks=blocks, kv_ratio=0.9)
+    coarse = OracleEval(**{**base.__dict__, "stage": "layer"})
+    span = OracleEval(
+        **{
+            **coarse.__dict__,
+            "method": "forward_greedy",
+            "stage": "span",
+            "selected_blocks": blocks,
+        }
+    )
+
+    coarse_payload = oracle_eval_to_dict(coarse, max_inline_selected_blocks=2)
+    span_payload = oracle_eval_to_dict(span, max_inline_selected_blocks=2)
+
+    assert coarse_payload["selected_blocks"] == []
+    assert coarse_payload["selected_blocks_omitted"] is True
+    assert coarse_payload["selected_block_count"] == 3
+    assert len(span_payload["selected_blocks"]) == 3
+    assert span_payload["selected_blocks_omitted"] is False

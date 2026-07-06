@@ -392,6 +392,16 @@ def _write_csv(rows: Iterable[dict[str, Any]], path: Path) -> None:
         writer.writerows(items)
 
 
+def oracle_eval_to_dict(item: OracleEval, *, max_inline_selected_blocks: int = 2048) -> dict[str, Any]:
+    payload = asdict(item)
+    selected_block_count = len(item.selected_blocks)
+    inline_blocks = item.stage == "span" or selected_block_count <= max_inline_selected_blocks
+    payload["selected_block_count"] = selected_block_count
+    payload["selected_blocks_omitted"] = not inline_blocks
+    payload["selected_blocks"] = [block.to_dict() for block in item.selected_blocks] if inline_blocks else []
+    return payload
+
+
 def _mean(values: Iterable[float | None]) -> float | None:
     kept = [float(value) for value in values if value is not None]
     if not kept:
@@ -452,7 +462,9 @@ def _trajectory_rows(steps: Sequence[OracleStep]) -> list[dict[str, Any]]:
     for step in steps:
         payload = step.to_dict()
         payload["selected_block_count"] = len(step.result.selected_blocks)
-        payload["selected_blocks"] = [block.to_dict() for block in step.result.selected_blocks]
+        payload["result"] = oracle_eval_to_dict(step.result)
+        payload["selected_blocks"] = payload["result"]["selected_blocks"]
+        payload["selected_blocks_omitted"] = payload["result"]["selected_blocks_omitted"]
         rows.append(payload)
     return rows
 
@@ -562,8 +574,8 @@ def write_oracle_artifacts(
     output_dir.mkdir(parents=True, exist_ok=True)
     step_evals = [step.result for step in steps]
     all_evals = [*baselines, *step_evals]
-    _write_jsonl((item.to_dict() for item in baselines), output_dir / "baselines.jsonl")
-    _write_jsonl((item.to_dict() for item in step_evals), output_dir / "oracle_step_results.jsonl")
+    _write_jsonl((oracle_eval_to_dict(item) for item in baselines), output_dir / "baselines.jsonl")
+    _write_jsonl((oracle_eval_to_dict(item) for item in step_evals), output_dir / "oracle_step_results.jsonl")
     _write_jsonl(_trajectory_rows(steps), output_dir / "oracle_trajectories.jsonl")
     baseline_rows = aggregate_oracle_evals(baselines)
     _write_csv(baseline_rows, output_dir / "baseline_summary.csv")
