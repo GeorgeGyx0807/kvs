@@ -1,0 +1,43 @@
+experiment_name: first_round_longbench_ruler
+model: Qwen/Qwen3-8B
+main_dataset: LongBench
+aux_dataset: RULER
+seed: 42
+
+task_scope:
+  main_subset:
+    - long-context_qa
+  aux_subset:
+    - ruler_synthetic_long_context
+
+budget_points:
+  - 0.1
+  - 0.2
+  - 0.4
+  - 0.6
+  - 0.8
+  - 1.0
+
+block_size:
+  type: page
+  tokens: 16
+
+paths:
+  protocol: docs/kv_subset_first_round_protocol.md
+  reports_dir: reports
+  outputs_dir: outputs
+  data_dir: data
+
+tables:
+  block_feature_table: outputs/block_feature_table.parquet
+  oracle_label_table: outputs/oracle_label_table.parquet
+  deployable_feature_table: outputs/deployable_feature_table.parquet
+
+plots:
+  ttft_decomposition: outputs/ttft_decomposition.png
+  frontier: outputs/frontier.png
+
+notes:
+  main_dataset_role: "LongBench is the primary evidence source for the paper claim."
+  aux_dataset_role: "RULER is a controlled auxiliary stress test, not the main claim source."
+  first_round_goal: "Prove the claim is plausible and the evidence chain is closed, not SOTA."

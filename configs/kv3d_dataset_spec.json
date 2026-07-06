@@ -1,0 +1,12 @@
+{
+  "sample_id": "id",
+  "dataset": "dataset",
+  "task_name": "task_name",
+  "prompt": "input",
+  "context": "context",
+  "gold_answer": "answer",
+  "answers": "answers",
+  "language": "language",
+  "length": "length"
+}
+

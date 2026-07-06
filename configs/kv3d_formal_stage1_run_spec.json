@@ -1,0 +1,62 @@
+{
+  "commands": {
+    "merge_shards": "python3 scripts/merge_kv3d_shards.py --shard-dirs outputs/kv3d_formal_stage1_narrativeqa_s100_shard_000 outputs/kv3d_formal_stage1_narrativeqa_s100_shard_001 outputs/kv3d_formal_stage1_narrativeqa_s100_shard_002 outputs/kv3d_formal_stage1_narrativeqa_s100_shard_003 outputs/kv3d_formal_stage1_narrativeqa_s100_shard_004 outputs/kv3d_formal_stage1_narrativeqa_s100_shard_005 outputs/kv3d_formal_stage1_narrativeqa_s100_shard_006 outputs/kv3d_formal_stage1_narrativeqa_s100_shard_007 outputs/kv3d_formal_stage1_narrativeqa_s100_shard_008 outputs/kv3d_formal_stage1_narrativeqa_s100_shard_009 --num-layers 36 --num-heads 8 --num-chunks 4  --no-include-chunk-level --model-name Qwen/Qwen3-8B --output-dir outputs/kv3d_formal_stage1_narrativeqa_s100",
+    "run_gpu_profile": "python3 scripts/run_kv3d_gpu_profile.py --model-name Qwen/Qwen3-8B --dataset-name THUDM/LongBench --config-name narrativeqa --split test --max-samples 100 --chunk-size 128 --max-context-tokens 512 --max-new-tokens 4 --max-layers 36 --max-heads 8 --num-chunks 4  --no-include-chunk-level --output-dir outputs/kv3d_formal_stage1_narrativeqa_s100",
+    "run_shards": [
+      "python3 scripts/run_kv3d_gpu_profile.py --model-name Qwen/Qwen3-8B --dataset-name THUDM/LongBench --config-name narrativeqa --split test --sample-offset 0 --max-samples 10 --chunk-size 128 --max-context-tokens 512 --max-new-tokens 4 --max-layers 36 --max-heads 8 --num-chunks 4  --no-include-chunk-level --output-dir outputs/kv3d_formal_stage1_narrativeqa_s100_shard_000",
+      "python3 scripts/run_kv3d_gpu_profile.py --model-name Qwen/Qwen3-8B --dataset-name THUDM/LongBench --config-name narrativeqa --split test --sample-offset 10 --max-samples 10 --chunk-size 128 --max-context-tokens 512 --max-new-tokens 4 --max-layers 36 --max-heads 8 --num-chunks 4  --no-include-chunk-level --output-dir outputs/kv3d_formal_stage1_narrativeqa_s100_shard_001",
+      "python3 scripts/run_kv3d_gpu_profile.py --model-name Qwen/Qwen3-8B --dataset-name THUDM/LongBench --config-name narrativeqa --split test --sample-offset 20 --max-samples 10 --chunk-size 128 --max-context-tokens 512 --max-new-tokens 4 --max-layers 36 --max-heads 8 --num-chunks 4  --no-include-chunk-level --output-dir outputs/kv3d_formal_stage1_narrativeqa_s100_shard_002",
+      "python3 scripts/run_kv3d_gpu_profile.py --model-name Qwen/Qwen3-8B --dataset-name THUDM/LongBench --config-name narrativeqa --split test --sample-offset 30 --max-samples 10 --chunk-size 128 --max-context-tokens 512 --max-new-tokens 4 --max-layers 36 --max-heads 8 --num-chunks 4  --no-include-chunk-level --output-dir outputs/kv3d_formal_stage1_narrativeqa_s100_shard_003",
+      "python3 scripts/run_kv3d_gpu_profile.py --model-name Qwen/Qwen3-8B --dataset-name THUDM/LongBench --config-name narrativeqa --split test --sample-offset 40 --max-samples 10 --chunk-size 128 --max-context-tokens 512 --max-new-tokens 4 --max-layers 36 --max-heads 8 --num-chunks 4  --no-include-chunk-level --output-dir outputs/kv3d_formal_stage1_narrativeqa_s100_shard_004",
+      "python3 scripts/run_kv3d_gpu_profile.py --model-name Qwen/Qwen3-8B --dataset-name THUDM/LongBench --config-name narrativeqa --split test --sample-offset 50 --max-samples 10 --chunk-size 128 --max-context-tokens 512 --max-new-tokens 4 --max-layers 36 --max-heads 8 --num-chunks 4  --no-include-chunk-level --output-dir outputs/kv3d_formal_stage1_narrativeqa_s100_shard_005",
+      "python3 scripts/run_kv3d_gpu_profile.py --model-name Qwen/Qwen3-8B --dataset-name THUDM/LongBench --config-name narrativeqa --split test --sample-offset 60 --max-samples 10 --chunk-size 128 --max-context-tokens 512 --max-new-tokens 4 --max-layers 36 --max-heads 8 --num-chunks 4  --no-include-chunk-level --output-dir outputs/kv3d_formal_stage1_narrativeqa_s100_shard_006",
+      "python3 scripts/run_kv3d_gpu_profile.py --model-name Qwen/Qwen3-8B --dataset-name THUDM/LongBench --config-name narrativeqa --split test --sample-offset 70 --max-samples 10 --chunk-size 128 --max-context-tokens 512 --max-new-tokens 4 --max-layers 36 --max-heads 8 --num-chunks 4  --no-include-chunk-level --output-dir outputs/kv3d_formal_stage1_narrativeqa_s100_shard_007",
+      "python3 scripts/run_kv3d_gpu_profile.py --model-name Qwen/Qwen3-8B --dataset-name THUDM/LongBench --config-name narrativeqa --split test --sample-offset 80 --max-samples 10 --chunk-size 128 --max-context-tokens 512 --max-new-tokens 4 --max-layers 36 --max-heads 8 --num-chunks 4  --no-include-chunk-level --output-dir outputs/kv3d_formal_stage1_narrativeqa_s100_shard_008",
+      "python3 scripts/run_kv3d_gpu_profile.py --model-name Qwen/Qwen3-8B --dataset-name THUDM/LongBench --config-name narrativeqa --split test --sample-offset 90 --max-samples 10 --chunk-size 128 --max-context-tokens 512 --max-new-tokens 4 --max-layers 36 --max-heads 8 --num-chunks 4  --no-include-chunk-level --output-dir outputs/kv3d_formal_stage1_narrativeqa_s100_shard_009"
+    ],
+    "shard_status": "python3 scripts/kv3d_shard_status.py --spec configs/kv3d_formal_stage1_run_spec.json --output outputs/kv3d_formal_stage1_narrativeqa_s100/shard_status.json",
+    "validate": "python3 scripts/validate_kv3d_run.py --run-dir outputs/kv3d_formal_stage1_narrativeqa_s100 --output outputs/kv3d_formal_stage1_narrativeqa_s100/validation.json --min-samples 100 --require-stability",
+    "validate_shards": [
+      "python3 scripts/validate_kv3d_run.py --run-dir outputs/kv3d_formal_stage1_narrativeqa_s100_shard_000 --output outputs/kv3d_formal_stage1_narrativeqa_s100_shard_000/validation.json --min-samples 10 --require-stability",
+      "python3 scripts/validate_kv3d_run.py --run-dir outputs/kv3d_formal_stage1_narrativeqa_s100_shard_001 --output outputs/kv3d_formal_stage1_narrativeqa_s100_shard_001/validation.json --min-samples 10 --require-stability",
+      "python3 scripts/validate_kv3d_run.py --run-dir outputs/kv3d_formal_stage1_narrativeqa_s100_shard_002 --output outputs/kv3d_formal_stage1_narrativeqa_s100_shard_002/validation.json --min-samples 10 --require-stability",
+      "python3 scripts/validate_kv3d_run.py --run-dir outputs/kv3d_formal_stage1_narrativeqa_s100_shard_003 --output outputs/kv3d_formal_stage1_narrativeqa_s100_shard_003/validation.json --min-samples 10 --require-stability",
+      "python3 scripts/validate_kv3d_run.py --run-dir outputs/kv3d_formal_stage1_narrativeqa_s100_shard_004 --output outputs/kv3d_formal_stage1_narrativeqa_s100_shard_004/validation.json --min-samples 10 --require-stability",
+      "python3 scripts/validate_kv3d_run.py --run-dir outputs/kv3d_formal_stage1_narrativeqa_s100_shard_005 --output outputs/kv3d_formal_stage1_narrativeqa_s100_shard_005/validation.json --min-samples 10 --require-stability",
+      "python3 scripts/validate_kv3d_run.py --run-dir outputs/kv3d_formal_stage1_narrativeqa_s100_shard_006 --output outputs/kv3d_formal_stage1_narrativeqa_s100_shard_006/validation.json --min-samples 10 --require-stability",
+      "python3 scripts/validate_kv3d_run.py --run-dir outputs/kv3d_formal_stage1_narrativeqa_s100_shard_007 --output outputs/kv3d_formal_stage1_narrativeqa_s100_shard_007/validation.json --min-samples 10 --require-stability",
+      "python3 scripts/validate_kv3d_run.py --run-dir outputs/kv3d_formal_stage1_narrativeqa_s100_shard_008 --output outputs/kv3d_formal_stage1_narrativeqa_s100_shard_008/validation.json --min-samples 10 --require-stability",
+      "python3 scripts/validate_kv3d_run.py --run-dir outputs/kv3d_formal_stage1_narrativeqa_s100_shard_009 --output outputs/kv3d_formal_stage1_narrativeqa_s100_shard_009/validation.json --min-samples 10 --require-stability"
+    ]
+  },
+  "dataset": {
+    "config_name": "narrativeqa",
+    "dataset_name": "THUDM/LongBench",
+    "max_samples": 100,
+    "split": "test"
+  },
+  "dimensions": {
+    "chunk_size": 128,
+    "include_addition": false,
+    "include_chunk_level": false,
+    "max_context_tokens": 512,
+    "max_new_tokens": 4,
+    "num_chunks": 4,
+    "num_heads": 8,
+    "num_layers": 36
+  },
+  "model_name": "Qwen/Qwen3-8B",
+  "per_sample_plan_size": 326,
+  "plan_size": 32600,
+  "profile_name": "kv3d_formal_stage1_narrativeqa_s100",
+  "sharding": {
+    "methods": "",
+    "shard_count": 10,
+    "shard_size": 10
+  },
+  "validation_gate": {
+    "min_heterogeneity_range": null,
+    "min_samples": 100,
+    "require_stability": true
+  }
+}
