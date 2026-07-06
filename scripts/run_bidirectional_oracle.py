@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import copy
 import csv
 import json
 import random
@@ -66,6 +65,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--gate-qmsum-rouge-l", type=float, default=0.20)
     parser.add_argument("--gate-candidate-multiplier", type=int, default=5)
     parser.add_argument("--max-candidate-samples", type=int, default=0)
+    parser.add_argument("--task-offsets", default="")
+    parser.add_argument("--task-candidate-samples", default="")
     parser.add_argument("--num-layers", type=int, default=0)
     parser.add_argument("--num-heads", type=int, default=0)
     parser.add_argument("--discard-fraction", type=float, default=0.30)
@@ -94,6 +95,18 @@ def apply_sanity_defaults(args: argparse.Namespace) -> None:
 
 def _parse_tasks(text: str) -> list[str]:
     return [item.strip() for item in text.split(",") if item.strip()]
+
+
+def _parse_task_int_map(text: str) -> dict[str, int]:
+    values: dict[str, int] = {}
+    for item in str(text or "").split(","):
+        if not item.strip():
+            continue
+        if "=" not in item:
+            raise ValueError(f"expected task=value entry, got {item!r}")
+        key, value = item.split("=", 1)
+        values[key.strip()] = int(value.strip())
+    return values
 
 
 def _oracle_suffix_for_task(task_name: str, prompt: str) -> str:
@@ -129,7 +142,14 @@ def _load_task_samples(args: argparse.Namespace, task_name: str) -> list[Profili
 
 
 def _task_args_for_task(args: argparse.Namespace, task_name: str) -> argparse.Namespace:
-    task_args = copy.copy(args)
+    values = {key: value for key, value in vars(args).items() if not key.startswith("_")}
+    task_args = argparse.Namespace(**values)
+    task_offsets = _parse_task_int_map(getattr(args, "task_offsets", ""))
+    task_candidate_samples = _parse_task_int_map(getattr(args, "task_candidate_samples", ""))
+    if task_name in task_offsets:
+        task_args.sample_offset = task_offsets[task_name]
+    if task_name in task_candidate_samples:
+        task_args.max_candidate_samples = task_candidate_samples[task_name]
     if task_name == "qmsum":
         task_args.max_new_tokens = max(int(args.max_new_tokens), int(args.qmsum_max_new_tokens))
     return task_args

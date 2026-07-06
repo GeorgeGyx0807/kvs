@@ -104,6 +104,26 @@ def test_parse_args_defaults_use_64_tokens_for_non_qmsum(monkeypatch):
     assert args.qmsum_max_new_tokens == 256
 
 
+def test_task_args_apply_per_task_offsets_and_candidate_counts():
+    class Args:
+        sample_offset = 0
+        max_candidate_samples = 20
+        max_new_tokens = 64
+        qmsum_max_new_tokens = 256
+        task_offsets = "qasper=2,qmsum=4"
+        task_candidate_samples = "qmsum=40"
+
+    qasper = oracle_script._task_args_for_task(Args, "qasper")
+    qmsum = oracle_script._task_args_for_task(Args, "qmsum")
+
+    assert qasper.sample_offset == 2
+    assert qasper.max_candidate_samples == 20
+    assert qasper.max_new_tokens == 64
+    assert qmsum.sample_offset == 4
+    assert qmsum.max_candidate_samples == 40
+    assert qmsum.max_new_tokens == 256
+
+
 def test_gate_row_includes_full_prediction_for_diagnostics():
     row = oracle_script._gate_row_for_full_eval(
         task_name="qasper",
