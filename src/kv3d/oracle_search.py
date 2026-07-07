@@ -60,7 +60,7 @@ class OracleEval:
     decode_ms: float | None
 
     def to_dict(self) -> dict[str, Any]:
-        payload = asdict(self)
+        payload = oracle_eval_base_dict(self)
         payload["selected_blocks"] = [block.to_dict() for block in self.selected_blocks]
         return payload
 
@@ -77,10 +77,16 @@ class OracleStep:
     result: OracleEval
 
     def to_dict(self) -> dict[str, Any]:
-        payload = asdict(self)
-        payload["changed_block"] = None if self.changed_block is None else self.changed_block.to_dict()
-        payload["result"] = self.result.to_dict()
-        return payload
+        return {
+            "sample_id": self.sample_id,
+            "task_name": self.task_name,
+            "direction": self.direction,
+            "stage": self.stage,
+            "step_index": self.step_index,
+            "action": self.action,
+            "changed_block": None if self.changed_block is None else self.changed_block.to_dict(),
+            "result": self.result.to_dict(),
+        }
 
 
 def task_family_for_longbench(task_name: str) -> str:
@@ -392,8 +398,31 @@ def _write_csv(rows: Iterable[dict[str, Any]], path: Path) -> None:
         writer.writerows(items)
 
 
+def oracle_eval_base_dict(item: OracleEval) -> dict[str, Any]:
+    return {
+        "sample_id": item.sample_id,
+        "method": item.method,
+        "direction": item.direction,
+        "stage": item.stage,
+        "step_index": item.step_index,
+        "prediction": item.prediction,
+        "gold_answer": item.gold_answer,
+        "answers": item.answers,
+        "f1": item.f1,
+        "contains": item.contains,
+        "exact": item.exact,
+        "nll": item.nll,
+        "selected_kv_bytes": item.selected_kv_bytes,
+        "full_kv_bytes": item.full_kv_bytes,
+        "kv_ratio": item.kv_ratio,
+        "ttft_ms": item.ttft_ms,
+        "prefill_ms": item.prefill_ms,
+        "decode_ms": item.decode_ms,
+    }
+
+
 def oracle_eval_to_dict(item: OracleEval, *, max_inline_selected_blocks: int = 2048) -> dict[str, Any]:
-    payload = asdict(item)
+    payload = oracle_eval_base_dict(item)
     selected_block_count = len(item.selected_blocks)
     inline_blocks = item.stage == "span" or selected_block_count <= max_inline_selected_blocks
     payload["selected_block_count"] = selected_block_count
@@ -460,7 +489,15 @@ def oracle_curve_rows(evals: Iterable[OracleEval], *, task_name: str) -> list[di
 def _trajectory_rows(steps: Sequence[OracleStep]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for step in steps:
-        payload = step.to_dict()
+        payload = {
+            "sample_id": step.sample_id,
+            "task_name": step.task_name,
+            "direction": step.direction,
+            "stage": step.stage,
+            "step_index": step.step_index,
+            "action": step.action,
+            "changed_block": None if step.changed_block is None else step.changed_block.to_dict(),
+        }
         payload["selected_block_count"] = len(step.result.selected_blocks)
         payload["result"] = oracle_eval_to_dict(step.result)
         payload["selected_blocks"] = payload["result"]["selected_blocks"]

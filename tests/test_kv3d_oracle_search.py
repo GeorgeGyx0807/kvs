@@ -1,3 +1,4 @@
+import src.kv3d.oracle_search as oracle_search
 from src.kv3d.oracle_search import OracleBlock
 from src.kv3d.oracle_search import OracleEval
 from src.kv3d.oracle_search import OracleStep
@@ -314,3 +315,49 @@ def test_oracle_eval_to_dict_compacts_large_non_span_selected_block_lists():
     assert coarse_payload["selected_block_count"] == 3
     assert len(span_payload["selected_blocks"]) == 3
     assert span_payload["selected_blocks_omitted"] is False
+
+
+def test_oracle_eval_to_dict_does_not_deep_copy_omitted_block_lists(monkeypatch):
+    blocks = tuple(OracleBlock("s1", 0, 0, idx, idx * 16, (idx + 1) * 16) for idx in range(3))
+    base = _eval(method="coarse_remove_layer", selected_blocks=blocks, kv_ratio=0.9)
+    coarse = OracleEval(**{**base.__dict__, "stage": "layer"})
+
+    def fail_on_eval(obj):
+        if isinstance(obj, OracleEval):
+            raise AssertionError("OracleEval should not be deep-copied")
+        return oracle_search.asdict(obj)
+
+    monkeypatch.setattr(oracle_search, "asdict", fail_on_eval)
+
+    payload = oracle_eval_to_dict(coarse, max_inline_selected_blocks=2)
+
+    assert payload["selected_blocks"] == []
+    assert payload["selected_blocks_omitted"] is True
+
+
+def test_trajectory_rows_do_not_deep_copy_step_results(monkeypatch):
+    blocks = tuple(OracleBlock("s1", 0, 0, idx, idx * 16, (idx + 1) * 16) for idx in range(2049))
+    base = _eval(method="coarse_remove_layer", selected_blocks=blocks, kv_ratio=0.9)
+    coarse = OracleEval(**{**base.__dict__, "stage": "layer"})
+    step = OracleStep(
+        sample_id="s1",
+        task_name="qasper",
+        direction="backward",
+        stage="layer",
+        step_index=1,
+        action="coarse_remove_layer",
+        changed_block=None,
+        result=coarse,
+    )
+
+    def fail_on_step_or_eval(obj):
+        if isinstance(obj, OracleStep | OracleEval):
+            raise AssertionError("OracleStep and OracleEval should not be deep-copied")
+        return oracle_search.asdict(obj)
+
+    monkeypatch.setattr(oracle_search, "asdict", fail_on_step_or_eval)
+
+    rows = oracle_search._trajectory_rows([step])
+
+    assert rows[0]["selected_blocks"] == []
+    assert rows[0]["selected_blocks_omitted"] is True
